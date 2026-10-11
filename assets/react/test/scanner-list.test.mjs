@@ -6,6 +6,7 @@ import {
   lastBackFor,
   normalizeScanList,
   scanListCsv,
+  scanListText,
   sessionBacks,
   totalQuantity,
   totalValueCents,
@@ -91,6 +92,24 @@ test("CSV uses the collection import columns, oldest scan first, with quoting", 
       "",
     ].join("\n"),
   )
+})
+
+test("text export is one decklist line per entry, oldest scan first", () => {
+  const text = scanListText([
+    entry("new", { name: "Borrowing 100,000 Arrows", finish: "foil", quantity: 3 }),
+    entry("etched", { setCode: "cmm", collectorNumber: "410", finish: "etched" }),
+    entry("old"),
+  ])
+  assert.equal(
+    text,
+    [
+      "1x Lightning Bolt (M10) 146",
+      "1x Lightning Bolt (CMM) 410 *E*",
+      "3x Borrowing 100,000 Arrows (M10) 146 *F*",
+      "",
+    ].join("\n"),
+  )
+  assert.equal(scanListText([]), "")
 })
 
 test("CSV purchase price defaults to the finish's market price and takes the user's edit", () => {

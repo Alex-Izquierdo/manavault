@@ -34,6 +34,7 @@ import {
   lastBackFor,
   normalizeScanList,
   scanListCsv,
+  scanListFileName,
   withPrinting,
   type ScanBackFace,
   type ScanEntry,
@@ -617,10 +618,9 @@ export function useScanSession({ paused }: { paused: boolean }) {
   /** Queues the list as CSV for the collection import overlay and opens it. */
   const addToCollection = useCallback(() => {
     if (entriesRef.current.length === 0) return
-    const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")
     queueSharedImport({
       text: scanListCsv(entriesRef.current),
-      fileName: `manavault-scan-${stamp}.csv`,
+      fileName: scanListFileName("csv"),
       mimeType: "text/csv",
       source: "scanner",
     })

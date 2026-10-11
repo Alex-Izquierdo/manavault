@@ -1,3 +1,4 @@
+import { shareListText } from "../trade/share-list-export.ts"
 import type { Finish, FinishPrices, PrintingOption } from "./printing-choice"
 import type { TrainingCapture } from "./scan-training"
 
@@ -192,6 +193,29 @@ export function scanListCsv(entries: ScanEntry[]) {
         .join(","),
     )
   return [CSV_HEADERS.join(","), ...rows].join("\n") + "\n"
+}
+
+/**
+ * Plain decklist text, oldest scan first: `2x Name (SET) 123 *F*`, the format the collection
+ * text import, deck imports and other card tools read.
+ */
+export function scanListText(entries: ScanEntry[]) {
+  const text = shareListText(
+    [...entries].reverse().map((entry) => ({
+      cardName: entry.name,
+      quantity: entry.quantity,
+      setCode: entry.setCode,
+      collectorNumber: entry.collectorNumber,
+      finish: entry.finish,
+    })),
+  )
+  return text ? `${text}\n` : ""
+}
+
+/** `manavault-scan-2026-10-11-14-05.csv`, stamped with the current UTC minute. */
+export function scanListFileName(extension: "csv" | "txt") {
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")
+  return `manavault-scan-${stamp}.${extension}`
 }
 
 function csvDollars(cents: number | null) {

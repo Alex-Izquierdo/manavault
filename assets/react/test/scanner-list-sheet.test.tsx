@@ -27,8 +27,7 @@ const entry: ScanEntry = {
   scannedAt: 0,
 }
 
-async function openRow(rowEntry: ScanEntry) {
-  const onPurchasePrice = vi.fn()
+function renderSheet(rowEntry: ScanEntry, onPurchasePrice = vi.fn()) {
   render(
     <ScanListSheet
       open
@@ -46,6 +45,11 @@ async function openRow(rowEntry: ScanEntry) {
       onAddToCollection={vi.fn()}
     />,
   )
+}
+
+async function openRow(rowEntry: ScanEntry) {
+  const onPurchasePrice = vi.fn()
+  renderSheet(rowEntry, onPurchasePrice)
   const user = userEvent.setup()
   await user.click(screen.getByRole("button", { expanded: false }))
   const input = screen.getByRole<HTMLInputElement>("textbox", {
@@ -78,4 +82,19 @@ test("clearing an edited price goes back to market; invalid input is discarded",
   await user.clear(input)
   await user.tab()
   expect(onPurchasePrice).toHaveBeenCalledWith("e1", null)
+})
+
+test("export offers the list as decklist text or as the import CSV", async () => {
+  renderSheet({ ...entry, finish: "foil" })
+  const user = userEvent.setup()
+  await user.click(screen.getByRole("button", { name: "Export" }))
+
+  const text = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Text export" })
+  expect(text.value).toBe("2x Lightning Bolt (M10) 146 *F*\n")
+  expect(screen.getByRole("button", { name: "Download .txt" })).toBeTruthy()
+
+  await user.click(screen.getByRole("radio", { name: "CSV" }))
+  const csv = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "CSV export" })
+  expect(csv.value.split("\n")[1]).toBe("Lightning Bolt,m10,146,2,foil,en,card,,9.00")
+  expect(screen.getByRole("button", { name: "Download .csv" })).toBeTruthy()
 })
