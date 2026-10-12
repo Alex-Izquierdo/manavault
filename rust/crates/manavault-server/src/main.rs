@@ -20,6 +20,14 @@ use tracing_subscriber::{EnvFilter, Layer as _};
 use manavault_core::config::Config;
 use manavault_core::logs::LogHub;
 
+/// glibc's allocator keeps memory freed by the periodic catalog and price
+/// syncs in per-thread arenas instead of returning it to the OS, so a
+/// long-running server's resident memory ratchets up with every sync.
+/// mimalloc returns freed pages and adapts to the system page size, which
+/// also matters on 16 KiB-page aarch64 kernels such as the Raspberry Pi 5's.
+#[global_allocator]
+static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 #[tokio::main]
 async fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();

@@ -9,35 +9,13 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use lotus::Finish;
+use serde::Deserialize;
 use serde_json::Value;
 
 use super::{Vendor, VendorFeed, VendorRow, get};
 use manavault_core::state::AppState;
 
 pub const PRICES_URL: &str = "https://manapool.com/api/v1/prices/singles";
-
-const LISTING_PRICES: [(Finish, [&str; 3]); 3] = [
-    (
-        Finish::Nonfoil,
-        ["price_cents_nm", "price_cents_lp_plus", "price_cents"],
-    ),
-    (
-        Finish::Foil,
-        [
-            "price_cents_nm_foil",
-            "price_cents_lp_plus_foil",
-            "price_cents_foil",
-        ],
-    ),
-    (
-        Finish::Etched,
-        [
-            "price_cents_nm_etched",
-            "price_cents_lp_plus_etched",
-            "price_cents_etched",
-        ],
-    ),
-];
 
 pub struct ManaPool {
     pub url: String,
@@ -54,40 +32,90 @@ impl VendorFeed for ManaPool {
         if status != reqwest::StatusCode::OK {
             return Err(format!("ManaPool returned HTTP {}", status.as_u16()));
         }
-        Ok(serde_json::from_slice::<Value>(&body)
-            .map(|body| rows(&body))
-            .unwrap_or_default())
+        Ok(rows(&body))
     }
 }
 
-fn first_price(variant: &Value, fields: &[&str]) -> Option<i64> {
-    fields.iter().find_map(|field| {
-        variant
-            .get(*field)
-            .and_then(Value::as_i64)
-            .filter(|cents| *cents > 0)
-    })
+/// The feed, reduced to the fields prices are read from. Decoding the
+/// ~50 MB feed into a generic JSON tree would allocate several hundred
+/// megabytes for fields that are never read; unknown fields are skipped
+/// instead. Fields stay loosely typed so an odd value skips its price, not
+/// the whole feed.
+#[derive(Deserialize)]
+struct Feed {
+    #[serde(default)]
+    data: Vec<Variant>,
 }
 
-/// Maps the feed into listing rows; market prices are never used.
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct Variant {
+    scryfall_id: Value,
+    price_cents: Value,
+    price_cents_lp_plus: Value,
+    price_cents_nm: Value,
+    price_cents_foil: Value,
+    price_cents_lp_plus_foil: Value,
+    price_cents_nm_foil: Value,
+    price_cents_etched: Value,
+    price_cents_lp_plus_etched: Value,
+    price_cents_nm_etched: Value,
+}
+
+impl Variant {
+    /// Each finish's listing prices, best condition first: near mint, then
+    /// lightly played or better, then any condition.
+    fn listing_prices(&self) -> [(Finish, [&Value; 3]); 3] {
+        [
+            (
+                Finish::Nonfoil,
+                [
+                    &self.price_cents_nm,
+                    &self.price_cents_lp_plus,
+                    &self.price_cents,
+                ],
+            ),
+            (
+                Finish::Foil,
+                [
+                    &self.price_cents_nm_foil,
+                    &self.price_cents_lp_plus_foil,
+                    &self.price_cents_foil,
+                ],
+            ),
+            (
+                Finish::Etched,
+                [
+                    &self.price_cents_nm_etched,
+                    &self.price_cents_lp_plus_etched,
+                    &self.price_cents_etched,
+                ],
+            ),
+        ]
+    }
+}
+
+/// Maps the feed body into listing rows; market prices are never used.
 #[must_use]
-pub fn rows(body: &Value) -> Vec<VendorRow> {
-    let Some(variants) = body.get("data").and_then(Value::as_array) else {
+pub fn rows(body: &[u8]) -> Vec<VendorRow> {
+    let Ok(feed) = serde_json::from_slice::<Feed>(body) else {
         return Vec::new();
     };
-    variants
-        .iter()
-        .filter_map(|variant| {
-            let id = variant
-                .get("scryfall_id")
-                .and_then(Value::as_str)
-                .filter(|id| !id.is_empty())?;
-            Some(LISTING_PRICES.iter().filter_map(move |(finish, fields)| {
-                first_price(variant, fields).map(|cents| VendorRow::new(id, *finish, cents))
-            }))
-        })
-        .flatten()
-        .collect()
+    let mut out = Vec::new();
+    for variant in &feed.data {
+        let Some(id) = variant.scryfall_id.as_str().filter(|id| !id.is_empty()) else {
+            continue;
+        };
+        for (finish, prices) in variant.listing_prices() {
+            if let Some(cents) = prices
+                .into_iter()
+                .find_map(|price| price.as_i64().filter(|cents| *cents > 0))
+            {
+                out.push(VendorRow::new(id, finish, cents));
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -108,7 +136,7 @@ mod tests {
             "price_cents_etched": 850, "price_cents_lp_plus_etched": 875, "price_cents_nm_etched": 900
         }]});
         assert_eq!(
-            rows(&body),
+            rows(body.to_string().as_bytes()),
             vec![
                 VendorRow::new("aaa", Finish::Nonfoil, 525),
                 VendorRow::new("aaa", Finish::Foil, 790),
@@ -126,7 +154,7 @@ mod tests {
             {"scryfall_id": "nonfoil-only", "price_market_foil": 300, "price_cents_nm": 200}
         ]});
         assert_eq!(
-            rows(&body),
+            rows(body.to_string().as_bytes()),
             vec![
                 VendorRow::new("aaa", Finish::Nonfoil, 290),
                 VendorRow::new("aaa", Finish::Foil, 310),
@@ -147,9 +175,9 @@ mod tests {
             {"scryfall_id": "ddd", "low_price": 400},
             {"scryfall_id": "aaa"}
         ]});
-        assert_eq!(rows(&body).len(), 0);
-        assert_eq!(rows(&json!({})).len(), 0);
-        assert_eq!(rows(&json!([1, 2])).len(), 0);
+        assert_eq!(rows(body.to_string().as_bytes()).len(), 0);
+        assert_eq!(rows(b"{}").len(), 0);
+        assert_eq!(rows(b"[1, 2]").len(), 0);
     }
 
     #[tokio::test]

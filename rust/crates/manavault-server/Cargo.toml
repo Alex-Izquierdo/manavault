@@ -23,6 +23,7 @@ hex.workspace = true
 hyper.workspace = true
 hyper-util.workspace = true
 lotus.workspace = true
+mimalloc.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
