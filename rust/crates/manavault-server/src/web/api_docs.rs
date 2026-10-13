@@ -13,6 +13,10 @@
 //! its API key. `docs/api.md` explains how to document another endpoint.
 
 use axum::Router;
+use axum::extract::{Request, State};
+use axum::middleware::{Next, from_fn_with_state};
+use axum::response::Response;
+use manavault_core::web::browser::put_browser_headers;
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi as _};
 use utoipa_swagger_ui::{Config, SwaggerUi};
@@ -92,7 +96,7 @@ impl Modify for BearerAuth {
 /// Requests go to the origin the page was loaded from, so the UI talks to
 /// whichever instance serves it, and they carry no cookie, so the requests
 /// the UI makes are the same ones any client would make.
-pub fn router() -> Router<WebState> {
+pub fn router(vite_dev: bool) -> Router<WebState> {
     Router::<WebState>::from(
         SwaggerUi::new(UI_PATH)
             .url(OPENAPI_PATH, ApiDoc::openapi())
@@ -113,6 +117,15 @@ pub fn router() -> Router<WebState> {
                     .doc_expansion("list"),
             ),
     )
+    .layer(from_fn_with_state(vite_dev, browser_headers))
+}
+
+/// The docs accept API keys in the browser, so protect the page with the
+/// same headers as the app's other pages without adding form CSRF checks.
+async fn browser_headers(State(vite_dev): State<bool>, request: Request, next: Next) -> Response {
+    let mut response = next.run(request).await;
+    put_browser_headers(response.headers_mut(), vite_dev);
+    response
 }
 
 #[cfg(test)]

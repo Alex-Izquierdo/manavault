@@ -38,6 +38,10 @@ validation is switched off too, because Swagger UI's validator badge would
 otherwise ask `validator.swagger.io` to fetch this instance's document, in a
 URL that names this instance's host.
 
+The documentation routes use the app's browser security headers, including
+its Content Security Policy and `X-Content-Type-Options: nosniff`. The policy
+allows framing only by the same origin.
+
 ## List Decks
 
 Send the key as an HTTP Bearer credential. Cookies and CSRF headers are not

@@ -200,6 +200,39 @@ async fn serves_the_document_and_the_ui_in_production_mode() {
     );
 }
 
+#[tokio::test]
+async fn docs_responses_have_browser_security_headers() {
+    for vite_dev in [false, true] {
+        let app = TestApp::with_config(|config| config.vite_dev_server = vite_dev).await;
+        let policy = manavault_core::web::browser::content_security_policy(vite_dev);
+        for path in [
+            "/docs/rest",
+            "/docs/rest/",
+            "/docs/rest/swagger-ui-bundle.js",
+            "/docs/rest/swagger-initializer.js",
+            "/docs/rest/swagger-ui.css",
+            "/docs/rest/missing-asset.js",
+            "/api-docs/openapi.json",
+        ] {
+            let response = get(&app, path).await;
+            assert_eq!(
+                response.header("content-security-policy"),
+                Some(policy.as_str()),
+                "{path} (vite_dev={vite_dev})"
+            );
+            assert_eq!(response.header("x-content-type-options"), Some("nosniff"));
+            assert_eq!(
+                response.header("referrer-policy"),
+                Some("strict-origin-when-cross-origin")
+            );
+            assert_eq!(
+                response.header("x-permitted-cross-domain-policies"),
+                Some("none")
+            );
+        }
+    }
+}
+
 /// The budget is spent by the first request, so the second is limited. The
 /// semantics of the budget itself are asserted in `share::api_v1`; what matters
 /// here is that the bodies equal the documented examples.

@@ -190,7 +190,7 @@ pub fn router(state: WebState) -> Router {
     router = router.merge(api_v1::scope(app.clone(), api_v1::routes()));
     // The OpenAPI document and the Swagger UI over it. Available in every
     // environment; the operations still need their key.
-    router = router.merge(api_docs::router());
+    router = router.merge(api_docs::router(app.config.vite_dev_server));
     router = router.route(
         "/share/graphql",
         share::graphql_route()
