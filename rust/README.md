@@ -30,6 +30,13 @@ manavault-allocation      reserving collection copies for deck cards
   sqlx talks to SQLite, and
   [lotus](https://github.com/cfbender/lotus) supplies the Magic domain types,
   Scryfall parsing, and decklist sources shared with the-gathering.
+- The `#[utoipa::path]` annotation next to each `/api/v1` handler and the
+  `ToSchema` derives on the types it serializes assemble the OpenAPI document
+  in `web::api_docs` (`GET /api-docs/openapi.json`), which Swagger UI renders
+  at `GET /docs/rest` in every environment. The UI's assets are embedded in
+  the binary, so the build downloads nothing and the routes need no static
+  files of their own; `docs/api.md` holds the contract and the steps to
+  document another endpoint.
 - `manavault-allocation` reserves physical collection copies for deck cards
   (allocate, deallocate, statuses, bulk and pull-list allocation, collection
   adds, proxies, disassembly, buylist needs), with the allocation invariants
@@ -57,7 +64,10 @@ manavault-allocation      reserving collection copies for deck cards
   and `manavault_collection::testing` add card and collection fixtures. Tests
   whose behavior comes from the server's middleware or the full router (share
   and trade pages, Scryfall assets, serving an upgraded old database) are
-  integration tests in `crates/manavault-server/tests/`.
+  integration tests in `crates/manavault-server/tests/`, where the personal
+  API's tests also check the served OpenAPI document against the official 3.1
+  meta-schema vendored in `crates/manavault-server/tests/fixtures` (`jsonschema`
+  is a dev-dependency, so the release binary is unaffected).
   The test helpers compile in every build rather than behind a feature, so
   test and dev builds share one build of each crate.
 
@@ -162,6 +172,10 @@ them never warn. Downgrades are not supported.
 - Keep the GraphQL schema compatible with the frontend's operations
   (`assets/react/src/gql`): diff `manavault sdl` before and after a change,
   and run `mise exec -- aube run codegen` so the frontend types follow.
+- Document a `/api/v1` endpoint by deriving `ToSchema` on the types it
+  serializes and annotating the handler, then listing both in
+  `web::api_docs::ApiDoc`; the served document is generated from those
+  annotations and never written by hand (`docs/api.md`).
 - Comments that say "earlier releases" or "found during the port" describe
   behavior inherited from, or deliberately changed since, the 1.x backend this
   server replaced; the git history before the Rust rewrite holds the rest.
