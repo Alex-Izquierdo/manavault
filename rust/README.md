@@ -111,6 +111,27 @@ slim Debian; see `docs/self-hosting.md`. CI (`.github/workflows/quality.yml`)
 regenerates `schema.sql` and `.sqlx` from the migrations and fails when they
 differ from the committed files, then runs `rust:check` and `rust:build`.
 
+To check the production build locally, run the release binary the way the image
+does. `MANAVAULT_ENV` defaults to `prod`, which requires a secret key and a
+public host, refuses to start without an admin password unless
+`MANAVAULT_AUTH_DISABLED=true`, and puts `DATA_DIR` in `/data` — so point it at
+a scratch directory and set the environment explicitly:
+
+```sh
+mise run rust:assets    # only after a frontend change; the shell serves priv/static/assets
+mise run rust:build
+MANAVAULT_ENV=prod PORT=4100 MANAVAULT_ROOT="$PWD" \
+  DATA_DIR=/tmp/manavault-prod \
+  DATABASE_PATH=/tmp/manavault-prod/manavault.db \
+  MANAVAULT_SECRET_KEY="$(openssl rand -base64 48)" \
+  MANAVAULT_PUBLIC_HOST=localhost:4100 \
+  MANAVAULT_AUTH_DISABLED=true \
+  rust/target/release/manavault serve
+```
+
+The app shell, `/api-docs/openapi.json`, and `/docs/rest` are then served
+straight from the binary, with no Vite in the picture.
+
 `manavault hash-password <password>` prints a `MANAVAULT_ADMIN_PASSWORD_HASH`
 value, `manavault sdl` prints the owner GraphQL schema, and
 `manavault sdl --public` the public share schema (`/share/graphql`).
